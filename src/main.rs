@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
 
-
 #[derive(Debug, Hash, Clone, Copy)]
 struct Cell {
     x: usize,
@@ -105,10 +104,9 @@ impl Sudoku {
             return *l;
         } else {
             if c_is_empty {
-                return 11
-            }
-            else {
-                return 0
+                return 11;
+            } else {
+                return 0;
             }
         }
     }
@@ -121,7 +119,7 @@ impl Sudoku {
         for &ccell in self.c.keys() {
             let row = ccell.x == cell.x;
             let col = ccell.y == cell.y;
-            let block = ccell.x/3 == cell.x/3 && ccell.y/3 == cell.y/3;
+            let block = ccell.x / 3 == cell.x / 3 && ccell.y / 3 == cell.y / 3;
 
             if row || col || block {
                 to_remove.insert(ccell, val);
@@ -137,7 +135,6 @@ impl Sudoku {
 
         self.n = Self::get_n(&self.c);
         self.l = Self::get_l(&self.n, self.c.is_empty());
-
     }
 }
 
@@ -186,15 +183,12 @@ fn main() {
         Some(sol) => {
             println!("Solution:");
             println!("{}", sol)
-        },
-        None => println!("No solution found.")
-    }
-    
-    
+        }
+        None => println!("No solution found."),
+    };
 }
 
 fn solve(mut s: Sudoku) -> Option<Sudoku> {
-
     // Eliminate all the cells with only one guess
     let res = s.n.get(&1);
     let mut one_cells: HashSet<Cell> = HashSet::new();
@@ -211,7 +205,7 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
             s.update(cell, *value.iter().next().unwrap());
         }
     }
-    
+
     if s.l > 0 && s.l != 11 {
         let res = s.n.get(&s.l);
         let mut next_cell: Cell = Cell::create(10, 10);
@@ -228,32 +222,31 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
         if let Some(set) = res {
             guesses = set.clone();
         }
-        
+
         for guess in guesses {
             let mut q = s.clone();
             q.update(next_cell, guess);
             let p = solve(q.clone());
             let mut is_none = false;
             match p {
-                None => {is_none = true;},
-                _ => {},
+                None => {
+                    is_none = true;
+                }
+                _ => {}
             }
 
             if !is_none {
-                return p
+                return p;
             }
         }
         None
-    }
-
-    else if s.l == 0 {
+    } else if s.l == 0 {
         None
-    }
-    else {
+    } else {
         for row in s.m {
             for val in row {
                 if val == 0 {
-                    return None
+                    return None;
                 }
             }
         }
