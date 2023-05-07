@@ -163,30 +163,6 @@ impl fmt::Display for Sudoku {
     }
 }
 
-fn main() {
-    let everest = [
-        [8, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 3, 6, 0, 0, 0, 0, 0],
-        [0, 7, 0, 0, 9, 0, 2, 0, 0],
-        [0, 5, 0, 0, 0, 7, 0, 0, 0],
-        [0, 0, 0, 0, 4, 5, 7, 0, 0],
-        [0, 0, 0, 1, 0, 0, 0, 3, 0],
-        [0, 0, 1, 0, 0, 0, 0, 6, 8],
-        [0, 0, 8, 5, 0, 0, 0, 1, 0],
-        [0, 9, 0, 0, 0, 0, 4, 0, 0],
-    ];
-    let s = Sudoku::create(everest);
-    println!("Original puzzle:");
-    println!("{}", s);
-    let res = solve(s.clone());
-    return match res {
-        Some(sol) => {
-            println!("Solution:");
-            println!("{}", sol)
-        }
-        None => println!("No solution found."),
-    };
-}
 
 fn solve(mut s: Sudoku) -> Option<Sudoku> {
     // Eliminate all the cells with only one guess
@@ -253,4 +229,29 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
 
         Some(s)
     }
+}
+
+fn main() {
+    let everest = [
+        [8, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 3, 6, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0, 9, 0, 2, 0, 0],
+        [0, 5, 0, 0, 0, 7, 0, 0, 0],
+        [0, 0, 0, 0, 4, 5, 7, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 3, 0],
+        [0, 0, 1, 0, 0, 0, 0, 6, 8],
+        [0, 0, 8, 5, 0, 0, 0, 1, 0],
+        [0, 9, 0, 0, 0, 0, 4, 0, 0],
+    ];
+    let s = Sudoku::create(everest);
+    println!("Original puzzle:");
+    println!("{}", s);
+    let res = solve(s.clone());
+    return match res {
+        Some(sol) => {
+            println!("Solution:");
+            println!("{}", sol)
+        }
+        None => println!("No solution found."),
+    };
 }
