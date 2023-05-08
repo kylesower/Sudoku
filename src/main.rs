@@ -129,7 +129,8 @@ impl Sudoku {
         for (k, v) in &to_remove {
             self.c.get_mut(k).unwrap().remove(v);
             if self.c.get_mut(k).unwrap().len() == 0 {
-                self.c.remove(k);
+                self.l = 0;
+                return ()
             }
         }
 
@@ -176,9 +177,11 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
         if let Some(set) = res {
             set.remove(&cell);
         }
-        let val = s.c.get(&cell);
-        if let Some(value) = val {
-            s.update(cell, *value.iter().next().unwrap());
+        let res = s.c.get(&cell);
+        if let Some(guesses) = res {
+            if let Some(val) = guesses.iter().next() {
+                s.update(cell, *val);
+            }
         }
     }
 
@@ -202,7 +205,7 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
         for guess in guesses {
             let mut q = s.clone();
             q.update(next_cell, guess);
-            let p = solve(q.clone());
+            let p = solve(q);
             let mut is_none = false;
             match p {
                 None => {
@@ -219,39 +222,63 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
     } else if s.l == 0 {
         None
     } else {
-        for row in s.m {
-            for val in row {
-                if val == 0 {
-                    return None;
-                }
-            }
-        }
-
         Some(s)
     }
 }
 
+fn solve_puzzle(puzzle: [[u8; 9]; 9]) -> Sudoku {
+
+
+    let s = Sudoku::create(puzzle);
+    // println!("Original puzzle:");
+    // println!("{}", s);
+    let res = solve(s);
+    return res.unwrap();
+}
+
 fn main() {
-    let everest = [
-        [8, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 3, 6, 0, 0, 0, 0, 0],
-        [0, 7, 0, 0, 9, 0, 2, 0, 0],
-        [0, 5, 0, 0, 0, 7, 0, 0, 0],
-        [0, 0, 0, 0, 4, 5, 7, 0, 0],
-        [0, 0, 0, 1, 0, 0, 0, 3, 0],
-        [0, 0, 1, 0, 0, 0, 0, 6, 8],
-        [0, 0, 8, 5, 0, 0, 0, 1, 0],
-        [0, 9, 0, 0, 0, 0, 4, 0, 0],
-    ];
-    let s = Sudoku::create(everest);
-    println!("Original puzzle:");
-    println!("{}", s);
-    let res = solve(s.clone());
-    return match res {
-        Some(sol) => {
-            println!("Solution:");
-            println!("{}", sol)
-        }
-        None => println!("No solution found."),
-    };
+    // let puzzle = [
+    //     [8, 0, 0, 0, 0, 0, 0, 0, 0],
+    //     [0, 0, 3, 6, 0, 0, 0, 0, 0],
+    //     [0, 7, 0, 0, 9, 0, 2, 0, 0],
+    //     [0, 5, 0, 0, 0, 7, 0, 0, 0],
+    //     [0, 0, 0, 0, 4, 5, 7, 0, 0],
+    //     [0, 0, 0, 1, 0, 0, 0, 3, 0],
+    //     [0, 0, 1, 0, 0, 0, 0, 6, 8],
+    //     [0, 0, 8, 5, 0, 0, 0, 1, 0],
+    //     [0, 9, 0, 0, 0, 0, 4, 0, 0],
+    // ]; // Everest puzzle
+    let puzzle = [
+        [1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 3, 0, 0, 2, 0, 0, 0, 8],
+        [0, 0, 9, 6, 0, 0, 5, 0, 0],
+        [0, 0, 5, 3, 0, 0, 9, 0, 0],
+        [0, 1, 0, 0, 8, 0, 0, 0, 2],
+        [6, 0, 0, 0, 0, 4, 0, 0, 0],
+        [3, 0, 0, 0, 0, 0, 0, 1, 0],
+        [0, 4, 0, 0, 0, 0, 0, 0, 7],
+        [0, 0, 7, 0, 0, 0, 3, 0, 0],
+    ]; // Al Escargot puzzle
+    // let puzzle = [
+    //     [0, 2, 0, 0, 3, 0, 0, 4, 0],
+    //     [6, 0, 0, 0, 0, 0, 0, 0, 3],
+    //     [0, 0, 4, 0, 0, 0, 5, 0, 0],
+    //     [0, 0, 0, 8, 0, 6, 0, 0, 0],
+    //     [8, 0, 0, 0, 1, 0, 0, 0, 6],
+    //     [0, 0, 0, 7, 0, 5, 0, 0, 0],
+    //     [0, 0, 7, 0, 0, 0, 6, 0, 0],
+    //     [4, 0, 0, 0, 0, 0, 0, 0, 8],
+    //     [0, 3, 0, 0, 4, 0, 0, 2, 0],
+    // ]; // https://www.mathworks.com/company/newsletters/articles/solving-sudoku-with-matlab.html
+
+    let mut sol = Sudoku::create(puzzle);
+    use std::time::Instant;
+    let now = Instant::now();
+    let n = 10;
+    for _ in 0..n {
+        sol = solve_puzzle(puzzle);
+    }
+    println!("{}", sol);
+    let elapsed = now.elapsed();
+    println!("Avg time to solve puzzle over {} iterations: {:.2?}", n, elapsed/n)
 }
