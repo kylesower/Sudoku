@@ -1,24 +1,11 @@
 use std::fmt;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
-
-
-fn get_num_nonzero(&vals: &[i8; 9]) -> i8 {
-    let mut count = 0;
-    for val in vals {
-        if val >= 0 {
-            count += 1;
-        }
-    }
-    count
-}
 
 #[derive(Debug, Clone)]
 struct Sudoku {
     m: [[i8; 9]; 9],
     k: [[bool; 9]; 9],
-    c: [[[i8; 9]; 9]; 9],
-    n: [[bool; 81]; 10],
+    c: [[Vec<i8>; 9]; 9],
+    n: [Vec<i8>; 10],
     l: i8,
     num_solved: u8,
     num_updates: u16,
@@ -27,7 +14,7 @@ struct Sudoku {
 impl Sudoku {
     fn create(m: [[i8; 9]; 9]) -> Self {
         let mut k = [[false; 9]; 9];
-        let mut c = [[[-1; 9]; 9]; 9];
+        let mut c: [[Vec<i8>; 9]; 9] = Default::default();
         let mut num_solved = 0;
         for item in m.iter().enumerate() {
             let (i, row): (usize, &[i8; 9]) = item;
@@ -37,8 +24,8 @@ impl Sudoku {
                     k[i][j] = true;
                     num_solved += 1;
                 } else {
-                    for num in 0..9 {
-                        c[i][j][num as usize] = num;
+                    for num in 1..=9 {
+                        c[i][j].push(num);
                     }
                 }
             }
@@ -48,9 +35,12 @@ impl Sudoku {
                 for x in 0..9 {
                     for y in 0..9 {
                         if i == x || j == y || (i / 3 == x / 3 && j / 3 == y / 3) {
-                            let num_to_remove = m[x][y] - 1;
+                            let num_to_remove = m[x][y];
                             if k[x][y] {
-                               c[i][j][num_to_remove as usize] = -1;
+                                let res = c[i][j].binary_search(&num_to_remove);
+                                if let Ok(ind) = res {
+                                    c[i][j].remove(ind);
+                                }
                             }
                         }
                     }
@@ -64,58 +54,48 @@ impl Sudoku {
         // println!("initial c: {:?}", c);
         // println!("initial k: {:?}", k);
         let num_updates = 0;
-        Self { m, k, c, n, l, num_solved, num_updates}
+        Self {
+            m,
+            k,
+            c,
+            n,
+            l,
+            num_solved,
+            num_updates,
+        }
     }
 
-    fn get_n(&c: &[[[i8; 9]; 9]; 9]) -> [[bool; 81]; 10] {
-        let mut n = [[false; 81]; 10];
+    fn get_n(c: &[[Vec<i8>; 9]; 9]) -> [Vec<i8>; 10] {
+        let mut n: [Vec<i8>; 10] = Default::default();
         for i in 0..9 {
             for j in 0..9 {
-                let num = get_num_nonzero(&c[i][j]);
-                // println!("num nonzero guesses at {},{} is {}", i, j, num);
-                n[num as usize][(i*9 + j) as usize] = true;
+                let num = c[i][j].len() as i8;
+                n[num as usize].push((i * 9 + j) as i8);
             }
         }
         // println!("n is {:?}", n);
         n
     }
 
-    fn get_l(&n: &[[bool; 81]; 10]) -> i8 {
+    fn get_l(n: &[Vec<i8>; 10]) -> i8 {
         for num_can in 1..10 {
-            for i in 0..81 {
-                if n[num_can][i]{
-                    // println!("l from get_l is {}", num_can);
-                    return num_can as i8;
-                }
+            if n[num_can].len() > 0 {
+                return num_can as i8;
             }
         }
 
         11
     }
 
-    fn clear_candidates(&mut self, i: usize, j: usize) {
-        for k in 0..9 {
-            self.c[i][j][k] = -1;
-        }
-    }
-
-    fn clear_candidate_val(&mut self, i: usize, j:usize, val: i8) -> bool {
-        let old_val = self.c[i][j][val as usize];
-        if old_val == -1 {
-            return false
-        }
-        self.c[i][j][val as usize] = -1;
-        true
-    }
-
     fn update(&mut self, i: usize, j: usize, val: i8) {
-        self.clear_candidates(i, j);
+        // self.clear_candidates(i, j);
+        self.c[i][j] = Vec::new();
         self.num_updates += 1;
         self.k[i][j] = true;
         self.num_solved += 1;
 
         // println!("num_solved: {}", self.num_solved);
-        self.m[i][j] = val + 1;
+        self.m[i][j] = val;
         // if self.num_solved == 81 {
         //     self.l = 0;
         //     return ()
@@ -124,60 +104,26 @@ impl Sudoku {
             for m in 0..9 {
                 let row = i == n;
                 let col = j == m;
-                let block = i/3 == n/3 && j/3 == m/3;
+                let block = i / 3 == n / 3 && j / 3 == m / 3;
                 if row || col || block {
-                    let guess_changed = self.clear_candidate_val(n,m,val);
-                    let num = get_num_nonzero(&self.c[n][m]);
-                    if num == 0 && guess_changed{
+                    let mut guess_changed = false;
+                    let res = self.c[n][m].binary_search(&val);
+                    if let Ok(ind) = res {
+                        self.c[n][m].remove(ind);
+                        guess_changed = true;
+                    }
+                    let num = self.c[n][m].len(); //get_num_nonzero(&self.c[n][m]);
+                    if num == 0 && guess_changed {
+                        // println!("Leaving early");
                         self.l = 0;
-                        return ()
+                        return ();
                     }
                 }
             }
         }
 
-        self.l = Self::get_l(& self.n);
+        self.l = Self::get_l(&self.n);
     }
-
-    fn get_first_nonzero_guess(&mut self, i: usize, j: usize) -> i8 {
-        let vals = self.c[i][j];
-        for val in vals {
-            if val > -1 {
-                // self.clear_candidate_val(i, j, val);
-                return val;
-            }
-        }
-
-        -1
-    }
-
-    fn get_rand_nonzero_guess(&mut self, i: usize, j: usize) -> i8 {
-        let vals = self.c[i][j];
-
-        for val in vals {
-            if val > -1 {
-                // self.clear_candidate_val(i, j, val);
-                return val;
-            }
-        }
-
-        -1
-    }
-
-    fn get_next_coordinates(&mut self) -> (usize, usize){
-        let possible = self.n[self.l as usize];
-        for cell in 0..81 {
-            if possible[cell] {
-                let j = cell % 9;
-                let i = (cell - j) / 9;
-                return (i, j)
-            }
-        }
-        // println!("possible cells are {:?}", possible);
-
-        (82, 82)
-    }
-
 }
 
 impl fmt::Display for Sudoku {
@@ -204,53 +150,53 @@ impl fmt::Display for Sudoku {
     }
 }
 
-
-
 fn solve(mut s: Sudoku) -> Option<Sudoku> {
     // Eliminate all the cells with only one guess
     while s.l == 1 {
-        let mut one_cells: Vec<usize> = Vec::new();
-        for cell in 0..81 {
-            if s.n[1][cell] {
-                one_cells.push(cell);
-                s.n[1][cell] = false;
-            }
-        }
+        let one_cells: Vec<_> = s.n[1].iter().copied().collect();
         for cell in one_cells {
             let j = cell % 9;
             let i = (cell - j) / 9;
             // s.clear_candidates(i, j);
-            let guess = s.get_first_nonzero_guess(i, j);
-            s.update(i, j, guess);
-
+            let res = s.c[i as usize][j as usize].pop();
+            if let Some(guess) = res {
+                s.update(i as usize, j as usize, guess);
+            }
         }
     }
 
-    if s.l > 0 && s.l != 11{
-        let (i, j) = s.get_next_coordinates();
+    if s.l > 0 && s.l != 11 {
+        // let (i, j) = s.get_next_coordinates();
         // println!("i: {i}");
-        s.n[s.l as usize][(i*9 + j) as usize] = false;
-        let vals = s.c[i][j];
+        // s.n[s.l as usize][(i*9 + j) as usize] = false;
+        let res = s.n[s.l as usize].pop();
+        let mut vals: Vec<i8> = Default::default();
+        let mut i = 0;
+        let mut j = 0;
+        if let Some(cell_num) = res {
+            j = cell_num % 9;
+            i = (cell_num - j) / 9;
+            vals = s.c[i as usize][j as usize].iter().copied().collect();
+        }
+
         // let mut rng = thread_rng();
         // vals.shuffle(&mut rng);
         for val in vals {
             let mut q = s.clone();
-            if val > -1 {
-                q.update(i, j, val);
-                let p = solve(q);
-                let mut is_none = false;
-                match p {
-                    None => {
-                        is_none = true;
-                    }
-                    _ => {}
+            q.update(i as usize, j as usize, val);
+            let p = solve(q);
+            let mut is_none = false;
+            match p {
+                None => {
+                    is_none = true;
                 }
+                _ => {}
+            }
 
-                if !is_none {
-                    // println!("{}", p.as_ref().unwrap());
-                    // println!("num_solved: {}", p.as_ref().unwrap().num_solved);
-                    return p;
-                }
+            if !is_none {
+                // println!("{}", p.as_ref().unwrap());
+                // println!("num_solved: {}", p.as_ref().unwrap().num_solved);
+                return p;
             }
         }
         None
@@ -268,39 +214,39 @@ fn solve_puzzle(puzzle: [[i8; 9]; 9]) -> Sudoku {
 }
 
 fn main() {
-    // let puzzle = [
-    //     [8, 0, 0, 0, 0, 0, 0, 0, 0],
-    //     [0, 0, 3, 6, 0, 0, 0, 0, 0],
-    //     [0, 7, 0, 0, 9, 0, 2, 0, 0],
-    //     [0, 5, 0, 0, 0, 7, 0, 0, 0],
-    //     [0, 0, 0, 0, 4, 5, 7, 0, 0],
-    //     [0, 0, 0, 1, 0, 0, 0, 3, 0],
-    //     [0, 0, 1, 0, 0, 0, 0, 6, 8],
-    //     [0, 0, 8, 5, 0, 0, 0, 1, 0],
-    //     [0, 9, 0, 0, 0, 0, 4, 0, 0],
-    // ]; // Everest puzzle
     let puzzle = [
-        [1, 0, 0, 0, 0, 7, 0, 9, 0],
-        [0, 3, 0, 0, 2, 0, 0, 0, 8],
-        [0, 0, 9, 6, 0, 0, 5, 0, 0],
-        [0, 0, 5, 3, 0, 0, 9, 0, 0],
-        [0, 1, 0, 0, 8, 0, 0, 0, 2],
-        [6, 0, 0, 0, 0, 4, 0, 0, 0],
-        [3, 0, 0, 0, 0, 0, 0, 1, 0],
-        [0, 4, 0, 0, 0, 0, 0, 0, 7],
-        [0, 0, 7, 0, 0, 0, 3, 0, 0],
-    ]; // Al Escargot puzzle
-    // let puzzle = [
-    //     [0, 2, 0, 0, 3, 0, 0, 4, 0],
-    //     [6, 0, 0, 0, 0, 0, 0, 0, 3],
-    //     [0, 0, 4, 0, 0, 0, 5, 0, 0],
-    //     [0, 0, 0, 8, 0, 6, 0, 0, 0],
-    //     [8, 0, 0, 0, 1, 0, 0, 0, 6],
-    //     [0, 0, 0, 7, 0, 5, 0, 0, 0],
-    //     [0, 0, 7, 0, 0, 0, 6, 0, 0],
-    //     [4, 0, 0, 0, 0, 0, 0, 0, 8],
-    //     [0, 3, 0, 0, 4, 0, 0, 2, 0],
-    // ]; // https://www.mathworks.com/company/newsletters/articles/solving-sudoku-with-matlab.html
+        [8, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 3, 6, 0, 0, 0, 0, 0],
+        [0, 7, 0, 0, 9, 0, 2, 0, 0],
+        [0, 5, 0, 0, 0, 7, 0, 0, 0],
+        [0, 0, 0, 0, 4, 5, 7, 0, 0],
+        [0, 0, 0, 1, 0, 0, 0, 3, 0],
+        [0, 0, 1, 0, 0, 0, 0, 6, 8],
+        [0, 0, 8, 5, 0, 0, 0, 1, 0],
+        [0, 9, 0, 0, 0, 0, 4, 0, 0],
+    ]; // Everest puzzle
+       // let puzzle = [
+       //     [1, 0, 0, 0, 0, 7, 0, 9, 0],
+       //     [0, 3, 0, 0, 2, 0, 0, 0, 8],
+       //     [0, 0, 9, 6, 0, 0, 5, 0, 0],
+       //     [0, 0, 5, 3, 0, 0, 9, 0, 0],
+       //     [0, 1, 0, 0, 8, 0, 0, 0, 2],
+       //     [6, 0, 0, 0, 0, 4, 0, 0, 0],
+       //     [3, 0, 0, 0, 0, 0, 0, 1, 0],
+       //     [0, 4, 0, 0, 0, 0, 0, 0, 7],
+       //     [0, 0, 7, 0, 0, 0, 3, 0, 0],
+       // ]; // Al Escargot puzzle
+       // let puzzle = [
+       //     [0, 2, 0, 0, 3, 0, 0, 4, 0],
+       //     [6, 0, 0, 0, 0, 0, 0, 0, 3],
+       //     [0, 0, 4, 0, 0, 0, 5, 0, 0],
+       //     [0, 0, 0, 8, 0, 6, 0, 0, 0],
+       //     [8, 0, 0, 0, 1, 0, 0, 0, 6],
+       //     [0, 0, 0, 7, 0, 5, 0, 0, 0],
+       //     [0, 0, 7, 0, 0, 0, 6, 0, 0],
+       //     [4, 0, 0, 0, 0, 0, 0, 0, 8],
+       //     [0, 3, 0, 0, 4, 0, 0, 2, 0],
+       // ]; // https://www.mathworks.com/company/newsletters/articles/solving-sudoku-with-matlab.html
 
     let mut sol = Sudoku::create(puzzle);
     use std::time::Instant;
@@ -312,5 +258,9 @@ fn main() {
     }
     println!("{}", sol);
     let elapsed = now.elapsed();
-    println!("Avg time to solve puzzle over {} iterations: {:.2?}", n, elapsed/n)
+    println!(
+        "Avg time to solve puzzle over {} iterations: {:.2?}",
+        n,
+        elapsed / n
+    )
 }
