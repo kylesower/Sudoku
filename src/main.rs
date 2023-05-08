@@ -1,142 +1,183 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::collections::HashSet;
 use std::fmt;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 
-#[derive(Debug, Hash, Clone, Copy)]
-struct Cell {
-    x: usize,
-    y: usize,
-}
 
-impl Cell {
-    fn create(x: usize, y: usize) -> Self {
-        Self { x, y }
+fn get_num_nonzero(&vals: &[i8; 9]) -> i8 {
+    let mut count = 0;
+    for val in vals {
+        if val >= 0 {
+            count += 1;
+        }
     }
+    count
 }
-
-impl PartialEq for Cell {
-    fn eq(&self, other: &Self) -> bool {
-        self.x == other.x && self.y == other.y
-    }
-}
-
-impl Eq for Cell {}
 
 #[derive(Debug, Clone)]
 struct Sudoku {
-    m: [[u8; 9]; 9],
-    k: HashMap<Cell, u8>,
-    c: HashMap<Cell, HashSet<u8>>,
-    n: HashMap<usize, HashSet<Cell>>,
-    l: usize,
+    m: [[i8; 9]; 9],
+    k: [[bool; 9]; 9],
+    c: [[[i8; 9]; 9]; 9],
+    n: [[bool; 81]; 10],
+    l: i8,
+    num_solved: u8,
+    num_updates: u16,
 }
 
 impl Sudoku {
-    fn create(m: [[u8; 9]; 9]) -> Self {
-        let mut k: HashMap<Cell, u8> = HashMap::new();
-        let mut c: HashMap<Cell, HashSet<u8>> = HashMap::new();
+    fn create(m: [[i8; 9]; 9]) -> Self {
+        let mut k = [[false; 9]; 9];
+        let mut c = [[[-1; 9]; 9]; 9];
+        let mut num_solved = 0;
         for item in m.iter().enumerate() {
-            let (i, row): (usize, &[u8; 9]) = item;
+            let (i, row): (usize, &[i8; 9]) = item;
             for square in row.iter().enumerate() {
-                let (j, number): (usize, &u8) = square;
-                let curr_cell = Cell::create(i.into(), j.into());
+                let (j, number): (usize, &i8) = square;
                 if *number > 0 {
-                    k.entry(curr_cell).or_insert(*number);
-                    ();
+                    k[i][j] = true;
+                    num_solved += 1;
                 } else {
-                    let mut guesses = HashSet::new();
-                    for num in 1..=9 {
-                        guesses.insert(num);
+                    for num in 0..9 {
+                        c[i][j][num as usize] = num;
                     }
-                    c.entry(curr_cell).or_insert(guesses);
                 }
             }
         }
-
         for i in 0..9 {
             for j in 0..9 {
-                for n in 0..9 {
-                    for m in 0..9 {
-                        if i == n || j == m || (i / 3 == n / 3 && j / 3 == m / 3) {
-                            let ccell = Cell::create(i.into(), j.into());
-                            let kcell = Cell::create(n, m);
-                            let num_to_remove = k.get(&kcell);
-                            if let Some(x) = num_to_remove {
-                                let cell_to_mod = c.get_mut(&ccell);
-                                if let Some(guesses) = cell_to_mod {
-                                    guesses.remove(x);
-                                }
+                for x in 0..9 {
+                    for y in 0..9 {
+                        if i == x || j == y || (i / 3 == x / 3 && j / 3 == y / 3) {
+                            let num_to_remove = m[x][y] - 1;
+                            if k[x][y] {
+                               c[i][j][num_to_remove as usize] = -1;
                             }
                         }
                     }
                 }
             }
         }
+        // println!("initial c is {:?}", c);
 
         let n = Self::get_n(&c);
-        let l = Self::get_l(&n, c.is_empty());
-
-        Self { m, k, c, n, l }
+        let l = Self::get_l(&n);
+        // println!("initial c: {:?}", c);
+        // println!("initial k: {:?}", k);
+        let num_updates = 0;
+        Self { m, k, c, n, l, num_solved, num_updates}
     }
 
-    fn get_n(c: &HashMap<Cell, HashSet<u8>>) -> HashMap<usize, HashSet<Cell>> {
-        let mut n: HashMap<usize, HashSet<Cell>> = HashMap::new();
-        for (key, val) in c.iter() {
-            let mut hashkey = HashSet::new();
-            hashkey.insert(*key);
-            match n.entry(val.len()) {
-                Entry::Occupied(_) => {
-                    n.get_mut(&val.len()).unwrap().extend(&hashkey);
-                }
-                Entry::Vacant(_) => {
-                    n.insert(val.len(), hashkey);
-                }
-            };
+    fn get_n(&c: &[[[i8; 9]; 9]; 9]) -> [[bool; 81]; 10] {
+        let mut n = [[false; 81]; 10];
+        for i in 0..9 {
+            for j in 0..9 {
+                let num = get_num_nonzero(&c[i][j]);
+                // println!("num nonzero guesses at {},{} is {}", i, j, num);
+                n[num as usize][(i*9 + j) as usize] = true;
+            }
         }
-
+        // println!("n is {:?}", n);
         n
     }
 
-    fn get_l(n: &HashMap<usize, HashSet<Cell>>, c_is_empty: bool) -> usize {
-        let res = n.keys().min();
-        if let Some(l) = res {
-            return *l;
-        } else {
-            if c_is_empty {
-                return 11;
-            } else {
-                return 0;
+    fn get_l(&n: &[[bool; 81]; 10]) -> i8 {
+        for num_can in 1..10 {
+            for i in 0..81 {
+                if n[num_can][i]{
+                    // println!("l from get_l is {}", num_can);
+                    return num_can as i8;
+                }
             }
+        }
+
+        11
+    }
+
+    fn clear_candidates(&mut self, i: usize, j: usize) {
+        for k in 0..9 {
+            self.c[i][j][k] = -1;
         }
     }
 
-    fn update(&mut self, cell: Cell, val: u8) {
-        self.c.remove(&cell);
-        self.k.entry(cell).or_insert(val);
-        self.m[cell.x][cell.y] = val;
-        let mut to_remove: HashMap<Cell, u8> = HashMap::new();
-        for &ccell in self.c.keys() {
-            let row = ccell.x == cell.x;
-            let col = ccell.y == cell.y;
-            let block = ccell.x / 3 == cell.x / 3 && ccell.y / 3 == cell.y / 3;
-
-            if row || col || block {
-                to_remove.insert(ccell, val);
-            }
+    fn clear_candidate_val(&mut self, i: usize, j:usize, val: i8) -> bool {
+        let old_val = self.c[i][j][val as usize];
+        if old_val == -1 {
+            return false
         }
-
-        for (k, v) in &to_remove {
-            self.c.get_mut(k).unwrap().remove(v);
-            if self.c.get_mut(k).unwrap().len() == 0 {
-                self.l = 0;
-                return ()
-            }
-        }
-
-        self.n = Self::get_n(&self.c);
-        self.l = Self::get_l(&self.n, self.c.is_empty());
+        self.c[i][j][val as usize] = -1;
+        true
     }
+
+    fn update(&mut self, i: usize, j: usize, val: i8) {
+        self.clear_candidates(i, j);
+        self.num_updates += 1;
+        self.k[i][j] = true;
+        self.num_solved += 1;
+
+        // println!("num_solved: {}", self.num_solved);
+        self.m[i][j] = val + 1;
+        // if self.num_solved == 81 {
+        //     self.l = 0;
+        //     return ()
+        // }
+        for n in 0..9 {
+            for m in 0..9 {
+                let row = i == n;
+                let col = j == m;
+                let block = i/3 == n/3 && j/3 == m/3;
+                if row || col || block {
+                    let guess_changed = self.clear_candidate_val(n,m,val);
+                    let num = get_num_nonzero(&self.c[n][m]);
+                    if num == 0 && guess_changed{
+                        self.l = 0;
+                        return ()
+                    }
+                }
+            }
+        }
+
+        self.l = Self::get_l(& self.n);
+    }
+
+    fn get_first_nonzero_guess(&mut self, i: usize, j: usize) -> i8 {
+        let vals = self.c[i][j];
+        for val in vals {
+            if val > -1 {
+                // self.clear_candidate_val(i, j, val);
+                return val;
+            }
+        }
+
+        -1
+    }
+
+    fn get_rand_nonzero_guess(&mut self, i: usize, j: usize) -> i8 {
+        let vals = self.c[i][j];
+
+        for val in vals {
+            if val > -1 {
+                // self.clear_candidate_val(i, j, val);
+                return val;
+            }
+        }
+
+        -1
+    }
+
+    fn get_next_coordinates(&mut self) -> (usize, usize){
+        let possible = self.n[self.l as usize];
+        for cell in 0..81 {
+            if possible[cell] {
+                let j = cell % 9;
+                let i = (cell - j) / 9;
+                return (i, j)
+            }
+        }
+        // println!("possible cells are {:?}", possible);
+
+        (82, 82)
+    }
+
 }
 
 impl fmt::Display for Sudoku {
@@ -146,11 +187,10 @@ impl fmt::Display for Sudoku {
         let mid_line = format!("{}{}{}", "│", "───┼".repeat(8), "───┤\n");
         let bot_line = format!("{}{}{}", "└", "───┴".repeat(8), "───┘");
         s.push_str(&top_line[..]);
-        for item in self.m.iter().enumerate() {
-            let (i, row): (usize, &[u8; 9]) = item;
+        for i in 0..9 {
             s.push_str("│");
-            for number in row {
-                s = format!("{} {} {}", s, number, "│");
+            for j in 0..9 {
+                s = format!("{} {} {}", s, self.m[i][j], "│");
             }
             s.pop();
             s.push_str("│\n");
@@ -165,57 +205,52 @@ impl fmt::Display for Sudoku {
 }
 
 
+
 fn solve(mut s: Sudoku) -> Option<Sudoku> {
     // Eliminate all the cells with only one guess
-    let res = s.n.get(&1);
-    let mut one_cells: HashSet<Cell> = HashSet::new();
-    if let Some(set) = res {
-        one_cells = set.iter().copied().collect();
-    }
-    for cell in one_cells {
-        let res = s.n.get_mut(&1);
-        if let Some(set) = res {
-            set.remove(&cell);
-        }
-        let res = s.c.get(&cell);
-        if let Some(guesses) = res {
-            if let Some(val) = guesses.iter().next() {
-                s.update(cell, *val);
+    while s.l == 1 {
+        let mut one_cells: Vec<usize> = Vec::new();
+        for cell in 0..81 {
+            if s.n[1][cell] {
+                one_cells.push(cell);
+                s.n[1][cell] = false;
             }
         }
+        for cell in one_cells {
+            let j = cell % 9;
+            let i = (cell - j) / 9;
+            // s.clear_candidates(i, j);
+            let guess = s.get_first_nonzero_guess(i, j);
+            s.update(i, j, guess);
+
+        }
     }
 
-    if s.l > 0 && s.l != 11 {
-        let res = s.n.get(&s.l);
-        let mut next_cell: Cell = Cell::create(10, 10);
-        if let Some(set) = res {
-            next_cell = set.iter().copied().next().unwrap();
-        }
-        let res = s.n.get_mut(&s.l);
-        if let Some(set) = res {
-            set.remove(&next_cell);
-        }
-
-        let res = s.c.get(&next_cell);
-        let mut guesses: HashSet<u8> = HashSet::new();
-        if let Some(set) = res {
-            guesses = set.clone();
-        }
-
-        for guess in guesses {
+    if s.l > 0 && s.l != 11{
+        let (i, j) = s.get_next_coordinates();
+        // println!("i: {i}");
+        s.n[s.l as usize][(i*9 + j) as usize] = false;
+        let vals = s.c[i][j];
+        // let mut rng = thread_rng();
+        // vals.shuffle(&mut rng);
+        for val in vals {
             let mut q = s.clone();
-            q.update(next_cell, guess);
-            let p = solve(q);
-            let mut is_none = false;
-            match p {
-                None => {
-                    is_none = true;
+            if val > -1 {
+                q.update(i, j, val);
+                let p = solve(q);
+                let mut is_none = false;
+                match p {
+                    None => {
+                        is_none = true;
+                    }
+                    _ => {}
                 }
-                _ => {}
-            }
 
-            if !is_none {
-                return p;
+                if !is_none {
+                    // println!("{}", p.as_ref().unwrap());
+                    // println!("num_solved: {}", p.as_ref().unwrap().num_solved);
+                    return p;
+                }
             }
         }
         None
@@ -226,12 +261,8 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
     }
 }
 
-fn solve_puzzle(puzzle: [[u8; 9]; 9]) -> Sudoku {
-
-
+fn solve_puzzle(puzzle: [[i8; 9]; 9]) -> Sudoku {
     let s = Sudoku::create(puzzle);
-    // println!("Original puzzle:");
-    // println!("{}", s);
     let res = solve(s);
     return res.unwrap();
 }
@@ -249,7 +280,7 @@ fn main() {
     //     [0, 9, 0, 0, 0, 0, 4, 0, 0],
     // ]; // Everest puzzle
     let puzzle = [
-        [1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 7, 0, 9, 0],
         [0, 3, 0, 0, 2, 0, 0, 0, 8],
         [0, 0, 9, 6, 0, 0, 5, 0, 0],
         [0, 0, 5, 3, 0, 0, 9, 0, 0],
@@ -277,6 +308,7 @@ fn main() {
     let n = 10;
     for _ in 0..n {
         sol = solve_puzzle(puzzle);
+        // println!("num updates is {}", sol.num_updates);
     }
     println!("{}", sol);
     let elapsed = now.elapsed();
