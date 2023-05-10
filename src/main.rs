@@ -1,146 +1,174 @@
-use std::fmt;
+static KNOWN: u16 = 0b1000_0000_0000_0000;
+
+fn coords_from_ind(ind: usize) -> (usize, usize) {
+    let j = ind % 9;
+    let i = (ind - j) / 9;
+    return (i, j)
+}
+
+fn block_num_from_coords(i: usize, j: usize) -> usize {
+    return (i/3)*3 + j/3
+}
 
 #[derive(Debug, Clone)]
 struct Sudoku {
-    m: [[i8; 9]; 9],
-    k: [[bool; 9]; 9],
-    c: [[Vec<i8>; 9]; 9],
-    n: [Vec<i8>; 10],
-    l: i8,
+    m: [u16; 81],
+    k: [bool; 81],
+    cells: [u16; 81],
+    rows: [u16; 9],
+    cols: [u16; 9],
+    blocks: [u16; 9],
+    mins: u128,
+    min_num: u16,
     num_solved: u8,
-    num_updates: u16,
 }
 
 impl Sudoku {
-    fn create(m: [[i8; 9]; 9]) -> Self {
-        let mut k = [[false; 9]; 9];
-        let mut c: [[Vec<i8>; 9]; 9] = Default::default();
+    fn create(mut m: [u16; 81]) -> Self {
+        let mut k = [false; 81];
+        let mut cells: [u16; 81] = [0; 81];
+        let mut mins: u128 = 0;
+        let mut rows: [u16; 9] = [0; 9];
+        let mut cols: [u16; 9] = [0; 9];
+        let mut blocks: [u16; 9] = [0; 9];
         let mut num_solved = 0;
-        for item in m.iter().enumerate() {
-            let (i, row): (usize, &[i8; 9]) = item;
-            for square in row.iter().enumerate() {
-                let (j, number): (usize, &i8) = square;
-                if *number > 0 {
-                    k[i][j] = true;
-                    num_solved += 1;
-                } else {
-                    for num in 1..=9 {
-                        c[i][j].push(num);
-                    }
-                }
-            }
-        }
-        for i in 0..9 {
-            for j in 0..9 {
-                for x in 0..9 {
-                    for y in 0..9 {
-                        if i == x || j == y || (i / 3 == x / 3 && j / 3 == y / 3) {
-                            let num_to_remove = m[x][y];
-                            if k[x][y] {
-                                let res = c[i][j].binary_search(&num_to_remove);
-                                if let Ok(ind) = res {
-                                    c[i][j].remove(ind);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        // println!("initial c is {:?}", c);
 
-        let n = Self::get_n(&c);
-        let l = Self::get_l(&n);
-        // println!("initial c: {:?}", c);
-        // println!("initial k: {:?}", k);
-        let num_updates = 0;
+        for i in 0..81 {
+            // Set all positive values to known
+            if m[i] > 0 {
+                cells[i] = KNOWN;
+                let (x, y) = coords_from_ind(i);
+                let z = block_num_from_coords(x, y);
+                let shift = 1 << m[i];
+                rows[x] |= shift;
+                cols[y] |= shift;
+                blocks[z] |= shift;
+                num_solved += 1;
+            } else {
+                cells[i] = 0b1000_0011_1111_1110;
+            }
+        }
+
+        let mut min_num: u16 = 10;
+        for i in 0..81 {
+            let (x, y) = coords_from_ind(i);
+            let z = block_num_from_coords(x, y);
+            cells[i] ^= cells[i] & rows[x];
+            cells[i] ^= cells[i] & cols[y];
+            cells[i] ^= cells[i] & blocks[z];
+            let num_ones = cells[i].count_ones();
+            if num_ones == 2 {
+                m[i] = cells[i].trailing_zeros() as u16;
+                cells[i] = KNOWN;
+                num_solved += 1;
+                println!("setting cell to known");
+            } else if num_ones == 1 {
+                continue;
+            } else {
+                let curr_num = (cells[i].count_ones() - 1) as u16;
+                if curr_num < min_num {
+                    min_num = curr_num;
+                    mins = 1 << i;
+                } else if curr_num == min_num {
+                    mins |= 1 << i;
+                }
+            }
+        }
+        let mut count_solved = 0;
+        for i in 0..81 {
+            if cells[i].count_ones() == 10 {
+                count_solved += 1;
+            }
+        }
+        println!("count_solved: {}", count_solved);
+        println!("num_solved: {}", num_solved);
+
+        for i in 0..81 {
+            println!("cell: {:b}, num cands: {}, coords: {:?}", cells[i], cells[i].count_ones() - 1, coords_from_ind(i));
+        }
+        let ind = (mins.trailing_zeros()) as usize;
+        let (x, y) = coords_from_ind(ind);
+        println!("min coords are {}, {}", x, y);
+        println!("first block is {:b}", blocks[0]);
+        println!("second col is {:b}", cols[1]);
+        println!("second row is {:b}", rows[1]);
         Self {
             m,
             k,
-            c,
-            n,
-            l,
+            cells,
+            rows,
+            cols,
+            blocks,
+            mins,
+            min_num,
             num_solved,
-            num_updates,
         }
     }
 
-    fn get_n(c: &[[Vec<i8>; 9]; 9]) -> [Vec<i8>; 10] {
-        let mut n: [Vec<i8>; 10] = Default::default();
-        for i in 0..9 {
-            for j in 0..9 {
-                let num = c[i][j].len() as i8;
-                n[num as usize].push((i * 9 + j) as i8);
-            }
-        }
-        // println!("n is {:?}", n);
-        n
-    }
-
-    fn get_l(n: &[Vec<i8>; 10]) -> i8 {
-        for num_can in 1..10 {
-            if n[num_can].len() > 0 {
-                return num_can as i8;
-            }
-        }
-
-        11
-    }
-
-    fn update(&mut self, i: usize, j: usize, val: i8) {
-        // self.clear_candidates(i, j);
-        self.c[i][j] = Vec::new();
-        self.num_updates += 1;
-        self.k[i][j] = true;
+    fn update(&mut self, i: usize, val: u16) {
+        self.cells[i] = KNOWN;
+        let shift = 1 << val;
+        let (x, y) = coords_from_ind(i);
+        let z = block_num_from_coords(x, y);
+        println!("Filling in ({},{}) with value {}", x, y, val);
+        self.rows[x] |= shift;
+        self.cols[y] |= shift;
+        self.blocks[z] |= shift;
+        self.m[i] = val;
         self.num_solved += 1;
-
-        // println!("num_solved: {}", self.num_solved);
-        self.m[i][j] = val;
-        // if self.num_solved == 81 {
-        //     self.l = 0;
-        //     return ()
-        // }
-        for n in 0..9 {
-            for m in 0..9 {
-                let row = i == n;
-                let col = j == m;
-                let block = i / 3 == n / 3 && j / 3 == m / 3;
-                if row || col || block {
-                    let mut guess_changed = false;
-                    let res = self.c[n][m].binary_search(&val);
-                    if let Ok(ind) = res {
-                        self.c[n][m].remove(ind);
-                        guess_changed = true;
-                    }
-                    let num = self.c[n][m].len(); //get_num_nonzero(&self.c[n][m]);
-                    if num == 0 && guess_changed {
-                        // println!("Leaving early");
-                        self.l = 0;
-                        return ();
-                    }
+        
+        self.min_num = 10;
+        println!("Mins before shift: {:b}", self.mins);
+        self.mins ^= self.mins & shift as u128;
+        println!("Mins after shift:  {:b}", self.mins);
+        for j in 0..81 {
+            let (x2, y2) = coords_from_ind(j);
+            let z2 = block_num_from_coords(x2, y2);
+            let old_val = self.cells[j];
+            if x == x2 || y == y2 || z == z2 {
+                self.cells[j] ^= self.cells[j] & self.rows[x2];
+                self.cells[j] ^= self.cells[j] & self.cols[y2];
+                self.cells[j] ^= self.cells[j] & self.blocks[z2];
+            }
+            if self.cells[j].count_ones() == 1 && old_val != self.cells[j] {
+                self.min_num = 0;
+                println!("\n\n ---- Breaking ---- \n\n");
+                return ();
+            }
+            let num_ones = self.cells[j].count_ones();
+            if num_ones != 1 {
+                let curr_num = (self.cells[j].count_ones() - 1) as u16;
+                if curr_num < self.min_num {
+                    self.min_num = curr_num;
+                    self.mins = 1 << j;
+                } else if curr_num == self.min_num {
+                    self.mins |= 1 << j;
                 }
             }
         }
 
-        self.l = Self::get_l(&self.n);
+        // for i in 0..81 {
+        //     println!("cell: {:b}, num cands: {}, coords: {:?}", self.cells[i], self.cells[i].count_ones() - 1, coords_from_ind(i));
+        // }
     }
 }
 
-impl fmt::Display for Sudoku {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+impl std::fmt::Display for Sudoku {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut s = "".to_string();
         let top_line = format!("{}{}{}", "┌", "───┬".repeat(8), "───┐\n");
         let mid_line = format!("{}{}{}", "│", "───┼".repeat(8), "───┤\n");
         let bot_line = format!("{}{}{}", "└", "───┴".repeat(8), "───┘");
         s.push_str(&top_line[..]);
-        for i in 0..9 {
-            s.push_str("│");
-            for j in 0..9 {
-                s = format!("{} {} {}", s, self.m[i][j], "│");
+        for i in 0..81 {
+            if i % 9 == 0 {
+                s.push_str("|");
             }
-            s.pop();
-            s.push_str("│\n");
-            if i != 8 {
+            s = format!("{} {} {}", s, self.m[i], "│");
+            if i % 9 == 8 {
+                s.push_str("\n");
+            }
+            if i % 9 == 8 && i != 80 {
                 s.push_str(&mid_line[..]);
             }
         }
@@ -152,89 +180,85 @@ impl fmt::Display for Sudoku {
 
 fn solve(mut s: Sudoku) -> Option<Sudoku> {
     // Eliminate all the cells with only one guess
-    while s.l == 1 {
-        let one_cells: Vec<_> = s.n[1].iter().copied().collect();
-        for cell in one_cells {
-            let j = cell % 9;
-            let i = (cell - j) / 9;
-            // s.clear_candidates(i, j);
-            let res = s.c[i as usize][j as usize].pop();
-            if let Some(guess) = res {
-                s.update(i as usize, j as usize, guess);
-            }
+    // while s.min_num == 1 {
+    //     let ind: usize = s.mins.trailing_zeros() as usize; 
+    //     s.update(ind, s.cells[ind].trailing_zeros() as u16);
+    //     println!("update inside s min num 1");
+    // }
+    println!("{}", s);
+    if s.min_num > 0 && s.min_num != 10 {
+        let ind: usize = s.mins.trailing_zeros() as usize;
+        println!("mins before: {:b}", s.mins);
+        s.mins ^= s.mins & (1 << ind);
+        println!("mins after: {:b}", s.mins);
+        let mut q = s.clone();
+        println!("mins are {:b}", s.mins);
+        println!("ind is {}", ind);
+        let mut test_cell = s.cells[ind];
+        println!("cell is {:b}", test_cell);
+        let n = test_cell.count_ones() - 1;
+        
+        for _ in 0..n {
+            let val: u16 = test_cell.trailing_zeros() as u16;
+            test_cell ^= test_cell & (1 << val);
+            println!("cell changed to {:b}", test_cell);
+            q.update(ind, val);
+            let res = solve(q.clone());
+            return res
         }
-    }
-
-    if s.l > 0 && s.l != 11 {
-        // let (i, j) = s.get_next_coordinates();
-        // println!("i: {i}");
-        // s.n[s.l as usize][(i*9 + j) as usize] = false;
-        let res = s.n[s.l as usize].pop();
-        let mut vals: Vec<i8> = Default::default();
-        let mut i = 0;
-        let mut j = 0;
-        if let Some(cell_num) = res {
-            j = cell_num % 9;
-            i = (cell_num - j) / 9;
-            vals = s.c[i as usize][j as usize].iter().copied().collect();
-        }
-
-        // let mut rng = thread_rng();
-        // vals.shuffle(&mut rng);
-        for val in vals {
-            let mut q = s.clone();
-            q.update(i as usize, j as usize, val);
-            let p = solve(q);
-            let mut is_none = false;
-            match p {
-                None => {
-                    is_none = true;
-                }
-                _ => {}
-            }
-
-            if !is_none {
-                // println!("{}", p.as_ref().unwrap());
-                // println!("num_solved: {}", p.as_ref().unwrap().num_solved);
-                return p;
-            }
-        }
+        println!("returning none");
         None
-    } else if s.l == 0 {
+    } else if s.min_num == 0 {
+        println!("min num is 0");
         None
     } else {
+        println!("No idea");
         Some(s)
     }
 }
 
-fn solve_puzzle(puzzle: [[i8; 9]; 9]) -> Sudoku {
+fn solve_puzzle(puzzle: [u16; 81]) -> Sudoku {
     let s = Sudoku::create(puzzle);
     let res = solve(s);
+    println!("{:?}", res);
     return res.unwrap();
 }
 
 fn main() {
+    println!("{}", block_num_from_coords(6, 6));
+    let mut res: u16 = 0;
+    res |= 1 << 9;
+    res |= 1 << 7;
+    let mut x: u16 = 0b1000_0010_0000_0000;
+    println!("{}", x.trailing_zeros());
+    println!("{}", x.count_ones());
+    // let y = 0b0000_0001_1001_0000;
+    // let z = 0b0000_0000_1001_0000;
+    // x ^= x & y;
+    // x ^= x & z;
+    // println!("{:b}", x);
+    
     let puzzle = [
-        [8, 0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 3, 6, 0, 0, 0, 0, 0],
-        [0, 7, 0, 0, 9, 0, 2, 0, 0],
-        [0, 5, 0, 0, 0, 7, 0, 0, 0],
-        [0, 0, 0, 0, 4, 5, 7, 0, 0],
-        [0, 0, 0, 1, 0, 0, 0, 3, 0],
-        [0, 0, 1, 0, 0, 0, 0, 6, 8],
-        [0, 0, 8, 5, 0, 0, 0, 1, 0],
-        [0, 9, 0, 0, 0, 0, 4, 0, 0],
+        8, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 3, 6, 0, 0, 0, 0, 0,
+        0, 7, 0, 0, 9, 0, 2, 0, 0,
+        0, 5, 0, 0, 0, 7, 0, 0, 0,
+        0, 0, 0, 0, 4, 5, 7, 0, 0,
+        0, 0, 0, 1, 0, 0, 0, 3, 0,
+        0, 0, 1, 0, 0, 0, 0, 6, 8,
+        0, 0, 8, 5, 0, 0, 0, 1, 0,
+        0, 9, 0, 0, 0, 0, 4, 0, 0,
     ]; // Everest puzzle
        // let puzzle = [
-       //     [1, 0, 0, 0, 0, 7, 0, 9, 0],
-       //     [0, 3, 0, 0, 2, 0, 0, 0, 8],
-       //     [0, 0, 9, 6, 0, 0, 5, 0, 0],
-       //     [0, 0, 5, 3, 0, 0, 9, 0, 0],
-       //     [0, 1, 0, 0, 8, 0, 0, 0, 2],
-       //     [6, 0, 0, 0, 0, 4, 0, 0, 0],
-       //     [3, 0, 0, 0, 0, 0, 0, 1, 0],
-       //     [0, 4, 0, 0, 0, 0, 0, 0, 7],
-       //     [0, 0, 7, 0, 0, 0, 3, 0, 0],
+       //     1, 0, 0, 0, 0, 7, 0, 9, 0,
+       //     0, 3, 0, 0, 2, 0, 0, 0, 8,
+       //     0, 0, 9, 6, 0, 0, 5, 0, 0,
+       //     0, 0, 5, 3, 0, 0, 9, 0, 0,
+       //     0, 1, 0, 0, 8, 0, 0, 0, 2,
+       //     6, 0, 0, 0, 0, 4, 0, 0, 0,
+       //     3, 0, 0, 0, 0, 0, 0, 1, 0,
+       //     0, 4, 0, 0, 0, 0, 0, 0, 7,
+       //     0, 0, 7, 0, 0, 0, 3, 0, 0,
        // ]; // Al Escargot puzzle
        // let puzzle = [
        //     [0, 2, 0, 0, 3, 0, 0, 4, 0],
@@ -248,7 +272,11 @@ fn main() {
        //     [0, 3, 0, 0, 4, 0, 0, 2, 0],
        // ]; // https://www.mathworks.com/company/newsletters/articles/solving-sudoku-with-matlab.html
 
-    let mut sol = Sudoku::create(puzzle);
+    // let mut sol = Sudoku::create(puzzle);
+    let sol = solve_puzzle(puzzle);
+    println!("{}", sol);
+    //println!("{:b}", sol.cells);
+    /*
     use std::time::Instant;
     let now = Instant::now();
     let n = 10;
@@ -263,4 +291,5 @@ fn main() {
         n,
         elapsed / n
     )
+    */
 }
