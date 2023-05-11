@@ -18,10 +18,8 @@ struct Sudoku {
     // rows: [u16; 9],
     // cols: [u16; 9],
     // blocks: [u16; 9],
-    // nums: [u16; 81],
     mins: u128,
     min_num: u16,
-    num_solved: u8,
 }
 
 impl Sudoku {
@@ -40,13 +38,17 @@ impl Sudoku {
                 cells[i] = KNOWN;
                 let (x, y) = coords_from_ind(i);
                 let z = block_num_from_coords(x, y);
+                // OR the rows/cols/blocks with the value represented as a
+                // bit shift. e.g. rows[0] = 0b0000_0000_0100_1000 means that a
+                // 3 and a 6 are present in row 0.
                 let shift = 1 << m[i];
                 rows[x] |= shift;
                 cols[y] |= shift;
                 blocks[z] |= shift;
-                num_solved += 1;
-                // nums[i] = 10;
             } else {
+                // First two bits describe whether the cell is
+                // known or empty. The rest of the ones represent
+                // potential candidates.
                 cells[i] = 0b1100_0011_1111_1110;
             }
         }
@@ -55,6 +57,12 @@ impl Sudoku {
         for i in 0..81 {
             let (x, y) = coords_from_ind(i);
             let z = block_num_from_coords(x, y);
+            // "Subtract" the values from the rows, cols, and blocks
+            // from each cell.
+            // Ex.        If cells[0] = 0b1100_0000_0111_1000, then candidates are
+            // 3, 4, 5, 6. If rows[0] = 0b0000_0000_1101_0000, then
+            // cells[0] becomes         0b1100_0000_0010_1000 because the row
+            // contained 4, 6, and 7.
             cells[i] ^= cells[i] & rows[x];
             cells[i] ^= cells[i] & cols[y];
             cells[i] ^= cells[i] & blocks[z];
@@ -82,7 +90,6 @@ impl Sudoku {
             // nums,
             mins,
             min_num,
-            num_solved,
         }
     }
 
@@ -103,24 +110,16 @@ impl Sudoku {
         let shift = 1 << val;
         let (x, y) = coords_from_ind(i);
         let z = block_num_from_coords(x, y);
-        // self.rows[x] |= shift;
-        // self.cols[y] |= shift;
-        // self.blocks[z] |= shift;
         self.m[i] = val;
-        self.num_solved += 1;
-        let ind_shift: i128 = 1 << i;
         
-        self.min_num = 10;
-        self.mins ^= self.mins & ind_shift as u128;
         for j in 0..81 {
             let (x2, y2) = coords_from_ind(j);
             let z2 = block_num_from_coords(x2, y2);
             let old_val = self.cells[j];
             if x == x2 || y == y2 || z == z2 && old_val != KNOWN {
+                // "Subtract" value from each of the cells in corresponding
+                // rows/cols/blocks
                 self.cells[j] ^= self.cells[j] & shift;
-                // self.cells[j] ^= self.cells[j] & self.rows[x2];
-                // self.cells[j] ^= self.cells[j] & self.cols[y2];
-                // self.cells[j] ^= self.cells[j] & self.blocks[z2];
             }
             if self.cells[j] == EMPTY {
                 self.min_num = 0;
@@ -132,6 +131,7 @@ impl Sudoku {
     }
 }
 
+// Print the object nicely
 impl std::fmt::Display for Sudoku {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let mut s = "".to_string();
@@ -163,6 +163,7 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
         let ind: usize = s.mins.trailing_zeros() as usize; 
         s.update(ind, s.cells[ind].trailing_zeros() as u16);
     }
+
     if s.min_num > 0 && s.min_num != 10 {
         let ind: usize = s.mins.trailing_zeros() as usize;
         let mut test_cell = s.cells[ind];
@@ -194,33 +195,32 @@ fn solve(mut s: Sudoku) -> Option<Sudoku> {
 fn solve_puzzle(puzzle: [u16; 81]) -> Sudoku {
     let s = Sudoku::create(puzzle);
     let res = solve(s);
-    // println!("{:?}", res);
     return res.unwrap();
 }
 
 fn main() {
-    let puzzle = [
-        8, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 3, 6, 0, 0, 0, 0, 0,
-        0, 7, 0, 0, 9, 0, 2, 0, 0,
-        0, 5, 0, 0, 0, 7, 0, 0, 0,
-        0, 0, 0, 0, 4, 5, 7, 0, 0,
-        0, 0, 0, 1, 0, 0, 0, 3, 0,
-        0, 0, 1, 0, 0, 0, 0, 6, 8,
-        0, 0, 8, 5, 0, 0, 0, 1, 0,
-        0, 9, 0, 0, 0, 0, 4, 0, 0,
-    ]; // Everest puzzle
-       // let puzzle = [
-       //     1, 0, 0, 0, 0, 7, 0, 9, 0,
-       //     0, 3, 0, 0, 2, 0, 0, 0, 8,
-       //     0, 0, 9, 6, 0, 0, 5, 0, 0,
-       //     0, 0, 5, 3, 0, 0, 9, 0, 0,
-       //     0, 1, 0, 0, 8, 0, 0, 0, 2,
-       //     6, 0, 0, 0, 0, 4, 0, 0, 0,
-       //     3, 0, 0, 0, 0, 0, 0, 1, 0,
-       //     0, 4, 0, 0, 0, 0, 0, 0, 7,
-       //     0, 0, 7, 0, 0, 0, 3, 0, 0,
-       // ]; // Al Escargot puzzle
+    // let puzzle = [
+    //     8, 0, 0, 0, 0, 0, 0, 0, 0,
+    //     0, 0, 3, 6, 0, 0, 0, 0, 0,
+    //     0, 7, 0, 0, 9, 0, 2, 0, 0,
+    //     0, 5, 0, 0, 0, 7, 0, 0, 0,
+    //     0, 0, 0, 0, 4, 5, 7, 0, 0,
+    //     0, 0, 0, 1, 0, 0, 0, 3, 0,
+    //     0, 0, 1, 0, 0, 0, 0, 6, 8,
+    //     0, 0, 8, 5, 0, 0, 0, 1, 0,
+    //     0, 9, 0, 0, 0, 0, 4, 0, 0,
+    // ]; // Everest puzzle
+       let puzzle = [
+           1, 0, 0, 0, 0, 7, 0, 9, 0,
+           0, 3, 0, 0, 2, 0, 0, 0, 8,
+           0, 0, 9, 6, 0, 0, 5, 0, 0,
+           0, 0, 5, 3, 0, 0, 9, 0, 0,
+           0, 1, 0, 0, 8, 0, 0, 0, 2,
+           6, 0, 0, 0, 0, 4, 0, 0, 0,
+           3, 0, 0, 0, 0, 0, 0, 1, 0,
+           0, 4, 0, 0, 0, 0, 0, 0, 7,
+           0, 0, 7, 0, 0, 0, 3, 0, 0,
+       ]; // Al Escargot puzzle
        // let puzzle = [
        //     0, 2, 0, 0, 3, 0, 0, 4, 0,
        //     6, 0, 0, 0, 0, 0, 0, 0, 3,
