@@ -15,9 +15,6 @@ fn block_num_from_coords(i: usize, j: usize) -> usize {
 struct Sudoku {
     m: [u16; 81],
     cells: [u16; 81],
-    // rows: [u16; 9],
-    // cols: [u16; 9],
-    // blocks: [u16; 9],
     mins: u128,
     min_num: u16,
 }
@@ -25,12 +22,10 @@ struct Sudoku {
 impl Sudoku {
     fn create(m: [u16; 81]) -> Self {
         let mut cells: [u16; 81] = [0; 81];
-        // let mut nums: [u16; 81] = [9; 81];
         let mut mins: u128 = 0;
         let mut rows: [u16; 9] = [0; 9];
         let mut cols: [u16; 9] = [0; 9];
         let mut blocks: [u16; 9] = [0; 9];
-        let mut num_solved = 0;
 
         for i in 0..81 {
             // Set all positive values to known
@@ -84,10 +79,6 @@ impl Sudoku {
         Self {
             m,
             cells,
-            // rows,
-            // cols,
-            // blocks,
-            // nums,
             mins,
             min_num,
         }
@@ -111,7 +102,7 @@ impl Sudoku {
         let (x, y) = coords_from_ind(i);
         let z = block_num_from_coords(x, y);
         self.m[i] = val;
-        
+
         for j in 0..81 {
             let (x2, y2) = coords_from_ind(j);
             let z2 = block_num_from_coords(x2, y2);
@@ -120,10 +111,10 @@ impl Sudoku {
                 // "Subtract" value from each of the cells in corresponding
                 // rows/cols/blocks
                 self.cells[j] ^= self.cells[j] & shift;
-            }
-            if self.cells[j] == EMPTY {
-                self.min_num = 0;
-                return ()
+                if self.cells[j] == EMPTY {
+                    self.min_num = 0;
+                    return ()
+                }
             }
         }
         
@@ -240,7 +231,7 @@ fn main() {
     
     use std::time::Instant;
     let now = Instant::now();
-    let n = 10;
+    let n = 100;
     for _ in 0..n {
         sol = solve_puzzle(puzzle);
         // println!("num updates is {}", sol.num_updates);
